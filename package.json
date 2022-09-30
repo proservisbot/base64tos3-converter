@@ -1,0 +1,35 @@
+{
+  "name": "base64tos3converter",
+  "version": "0.0.1",
+  "description": "Base64ToS3Converter project to be used in a sherpa",
+  "dependencies": {
+    "express": "^4.18.1",
+    "joi": "^17.6.2",
+    "serverless-http": "^3.0.2",
+    "sharp": "^0.29.3"
+  },
+  "devDependencies": {
+    "aws-sdk": "^2.1225.0",
+    "depcheck": "^1.4.2",
+    "eslint": "^8.0.1",
+    "eslint-config-airbnb-base": "^14.2.1",
+    "eslint-plugin-import": "^2.25.2",
+    "eslint-plugin-mocha": "^9.0.0",
+    "pre-commit": "^1.2.2"
+  },
+  "scripts": {
+    "report": "nyc report --reporter=lcov",
+    "lint": "./node_modules/.bin/eslint .",
+    "depcheck": "./node_modules/.bin/depcheck --ignores pre-commit .",
+    "zip": "rm -rf node_modules && npm i --production --platform=linux --arch=x64 && zip -FSr base64tos3converter-$npm_package_version.zip node_modules src && npm i"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/proservisbot/base64tos3-converter"
+  },
+  "author": "ServisBot",
+  "pre-commit": [
+    "lint",
+    "depcheck"
+  ]
+}
