@@ -20,7 +20,9 @@ module.exports = (dependencies) => {
 
     const validationResult = SCHEMA.validate(req.body, { abortEarly: false });
     if (validationResult.error) {
-      return next(new Error(validationResult.error.message));
+      const err = new Error(validationResult.error.message);
+      err.status = 400;
+      return next(err);
     }
 
     const fileName = await converter.convertAndStore(base64, mimeType);
@@ -29,7 +31,7 @@ module.exports = (dependencies) => {
       Bucket: environment.getFileBucket(),
       Key: fileName,
       Expires: 300
-    });
+    }).promise();
 
     return res.json({ presignedUrl: url });
   });
