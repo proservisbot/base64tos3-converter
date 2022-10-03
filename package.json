@@ -36,6 +36,7 @@
   "author": "ServisBot",
   "pre-commit": [
     "lint",
-    "depcheck"
+    "depcheck",
+    "test"
   ]
 }
