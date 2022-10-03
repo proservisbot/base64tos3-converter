@@ -1,0 +1,223 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+Description: >
+  Template for the Base64ToS3Converter. For deployment information, see README.md
+
+Parameters:
+  Version: { Type: "String" }
+  SherpaName: { Type: "String" }
+  ApiKeySSMParameter: {  Type: "String"  }
+  LambdaMemorySize: { Type: String, Default: "1024" }
+  AcmCertArn: { Type: "String" }
+  CustomDomainName: { Type: "String" }
+
+Resources:
+  S3BucketRegional:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${SherpaName}-base64tos3converter-${AWS::Region}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      CorsConfiguration:
+        CorsRules:
+          - AllowedHeaders: [ "*" ]
+            AllowedMethods: [ "GET",'PUT' ]
+            MaxAge: 3600
+            AllowedOrigins: [ "*" ]
+      VersioningConfiguration:
+        Status: Enabled
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  LambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub "${AWS::Region}-Base64ToS3ConverterRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Principal:
+              Service:
+                - "lambda.amazonaws.com"
+            Action:
+              - "sts:AssumeRole"
+
+  LambdaPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Sub "${AWS::Region}-Base64ToS3ConverterPolicy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          -
+            Effect: "Allow"
+            Action:
+              - "logs:CreateLogGroup"
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource:
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/base64tos3converter*"
+              - !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/base64tos3converter*:*"
+          - Effect: Allow
+            Action:
+              - s3:PutObject
+              - s3:GetObject
+              - s3:GetObjectTagging
+              - s3:GetObjectVersionTagging
+              - s3:PutObjectAcl
+            Resource:
+              - !Sub "arn:aws:s3:::${S3BucketRegional}/*"
+          - Effect: Allow
+            Action:
+              - 'ssm:GetParameter'
+            Resource:
+              - !Sub 'arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/base64tos3converter/apikey'
+      Roles: [!Ref 'LambdaRole']
+
+  ApiLambdaFunction:
+    DependsOn: [ LambdaPolicy ]
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Sub "${SherpaName}-deployment-bucket-${AWS::Region}"
+        S3Key: !Sub "base64tos3converter-${Version}.zip"
+      Description: API handler for the base64tos3converter
+      Environment:
+        Variables:
+          NODE_ENV: production
+          API_KEY_SSM_PARAMETER: !Ref ApiKeySSMParameter
+          FILE_BUCKET: !Ref S3BucketRegional
+      FunctionName: !Sub "base64tos3converter-api"
+      Handler: "src/api/handlers/api.handler"
+      MemorySize: !Ref LambdaMemorySize
+      Role: !GetAtt LambdaRole.Arn
+      Runtime: "nodejs16.x"
+      Timeout: 30
+
+  ApiGatewayRestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Sub base64tos3converter
+      EndpointConfiguration:
+        Types:
+          - EDGE
+      Policy: ''
+
+  ApiGatewayV1Resource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt 'ApiGatewayRestApi.RootResourceId'
+      PathPart: 'v1'
+      RestApiId: !Ref 'ApiGatewayRestApi'
+
+  ApiGatewayV1ResourceProxyVar:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref 'ApiGatewayV1Resource'
+      PathPart: '{proxy+}'
+      RestApiId: !Ref 'ApiGatewayRestApi'
+
+  ApiGatewayV1MethodProxyVarAny:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: ANY
+      RequestParameters: { }
+      ResourceId: !Ref 'ApiGatewayV1ResourceProxyVar'
+      RestApiId: !Ref 'ApiGatewayRestApi'
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiLambdaFunction.Arn}/invocations'
+      MethodResponses: [ ]
+
+  ApiGatewayV1Resource:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt 'ApiGatewayRestApi.RootResourceId'
+      PathPart: 'v1'
+      RestApiId: !Ref 'ApiGatewayRestApi'
+
+  ApiGatewayV1ResourceProxyVar:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !Ref 'ApiGatewayV1Resource'
+      PathPart: '{proxy+}'
+      RestApiId: !Ref 'ApiGatewayRestApi'
+
+  ApiGatewayV1MethodProxyVarAny:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: ANY
+      RequestParameters: { }
+      ResourceId: !Ref 'ApiGatewayV1ResourceProxyVar'
+      RestApiId: !Ref 'ApiGatewayRestApi'
+      ApiKeyRequired: false
+      AuthorizationType: NONE
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${ApiLambdaFunction.Arn}/invocations'
+      MethodResponses: [ ]
+
+  ApiGatewayDeployment:
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref 'ApiGatewayRestApi'
+      StageName: production
+    DependsOn:
+      - ApiGatewayV1MethodProxyVarAny
+
+  ApiLambdaPermissionApiGateway:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt 'ApiLambdaFunction.Arn'
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGatewayRestApi}/*/*'
+
+  CustomDomain:
+    DependsOn: ApiGatewayDeployment
+    Type: AWS::ApiGateway::DomainName
+    Properties:
+      DomainName: !Sub "base64tos3converter.${CustomDomainName}"
+      SecurityPolicy: TLS_1_2
+      RegionalCertificateArn: !Ref AcmCertArn
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  CustomDomainMapping:
+    DependsOn: CustomDomain
+    Type: 'AWS::ApiGateway::BasePathMapping'
+    Properties:
+      DomainName: !Sub "base64tos3converter.${CustomDomainName}"
+      RestApiId: !Ref ApiGatewayRestApi
+      Stage: "production"
+
+  RegionalCustomDomain:
+    DependsOn: ApiGatewayDeployment
+    Type: "AWS::ApiGateway::DomainName"
+    Properties:
+      DomainName: !Sub "base64tos3converter-${AWS::Region}.${CustomDomainName}"
+      SecurityPolicy: TLS_1_2
+      RegionalCertificateArn: !Ref AcmCertArn
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  RegionalCustomDomainMapping:
+    DependsOn: RegionalCustomDomain
+    Type: 'AWS::ApiGateway::BasePathMapping'
+    Properties:
+      DomainName: !Sub "base64tos3converter-${AWS::Region}.${CustomDomainName}"
+      RestApiId: !Ref "ApiGatewayRestApi"
+      Stage: "production"
