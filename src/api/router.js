@@ -27,17 +27,18 @@ module.exports = (dependencies) => {
 
     const fileName = await converter.convertAndStore(base64, mimeType);
 
-    const url = await s3.getSignedUrl('getObject', {
+    const url = s3.getSignedUrl('getObject', {
       Bucket: environment.getFileBucket(),
       Key: fileName,
       Expires: 300
-    }).promise();
+    });
 
     return res.json({ presignedUrl: url });
   });
 
   // eslint-disable-next-line no-unused-vars
   app.use(async (err, req, res, next) => {
+    console.log(err);
     const status = err.status ? err.status : 500;
     const message = err.publicMessage ? err.publicMessage : err.message;
     res.status(status).json({
