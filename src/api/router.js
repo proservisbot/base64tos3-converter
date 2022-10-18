@@ -4,7 +4,7 @@ const checkAuthorizationMiddleware = require('./middleware/checkAuthorization');
 
 module.exports = (dependencies) => {
   const app = Express();
-  app.use(Express.json());
+  app.use(Express.json({ limit: '50MB' }));
   app.disable('x-powered-by');
 
   const checkAuth = checkAuthorizationMiddleware(dependencies);
