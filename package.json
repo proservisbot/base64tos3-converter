@@ -4,7 +4,7 @@
   "description": "Base64ToS3Converter project to be used in a sherpa",
   "dependencies": {
     "express": "^4.18.1",
-    "joi": "^17.6.2",
+    "joi": "^17.13.7",
     "serverless-http": "^3.0.2",
     "sharp": "^0.29.3"
   },
